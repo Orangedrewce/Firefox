@@ -260,8 +260,8 @@
                     <div class="preset-buttons">
                         <button class="preset-btn" data-preset="calm" type="button">Calm</button>
                         <button class="preset-btn" data-preset="energetic" type="button">Energetic</button>
-                        <button class="preset-btn" data-preset="smooth" type="button">Smooth</button>
-                        <button class="preset-btn" data-preset="chaotic" type="button">Chaotic</button>
+                        <button class="preset-btn" data-preset="intense" type="button">Intense</button>
+                        <button class="preset-btn" data-preset="default" type="button">Default</button>
                     </div>
 
                     <p class="settings-note">Affects the animated lava background shown behind this menu. Move your mouse to interact.</p>
@@ -513,10 +513,10 @@
     <script type="module">
         // Wire up the lava lamp controls UI to the global lavaLampBackground created earlier
         const presets = {
-            calm: { mouseStrength: 0.2, riseSpeed: 0.05, blobScale: 2.5, detailScale: 3.0, glowStrength: 1.0 },
-            energetic: { mouseStrength: 0.4, riseSpeed: 0.15, blobScale: 1.2, detailScale: 7.0, glowStrength: 2.5 },
-            smooth: { mouseStrength: 0.3, riseSpeed: 0.08, blobScale: 2.0, detailScale: 4.0, glowStrength: 1.8 },
-            chaotic: { mouseStrength: 0.5, riseSpeed: 0.18, blobScale: 0.8, detailScale: 9.0, glowStrength: 3.0 }
+            calm: { mouseStrength: 0.2, riseSpeed: 0.05, blobScale: 1.5, detailScale: 4.0, glowStrength: 1.0 },
+            energetic: { mouseStrength: 0.6, riseSpeed: 0.15, blobScale: 2.2, detailScale: 8.0, glowStrength: 2.0 },
+            intense: { mouseStrength: 0.8, riseSpeed: 0.25, blobScale: 3.0, detailScale: 10.0, glowStrength: 3.0 },
+            default: { mouseStrength: 0.3, riseSpeed: 0.08, blobScale: 1.8, detailScale: 5.0, glowStrength: 1.5 }
         };
 
         function updateDisplay(id, value, digits = 2) {
@@ -527,6 +527,17 @@
         function applySettings(settings) {
             if (window.lavaLampBackground && typeof window.lavaLampBackground.updateSettings === 'function') {
                 window.lavaLampBackground.updateSettings(settings);
+            }
+        }
+
+        function applyPreset(presetName) {
+            // Try to use the shader's built-in presets first
+            if (window.lavaLampBackground && typeof window.lavaLampBackground.applyPreset === 'function') {
+                window.lavaLampBackground.applyPreset(presetName);
+            } else {
+                // Fallback to local presets
+                const preset = presets[presetName];
+                if (preset) applySettings(preset);
             }
         }
 
@@ -560,8 +571,11 @@
                     const name = btn.getAttribute('data-preset');
                     const preset = presets[name];
                     if (!preset) return;
-                    applySettings(preset);
-                    // Reflect in UI
+                    
+                    // Apply preset to lava lamp
+                    applyPreset(name);
+                    
+                    // Update UI to reflect preset values
                     document.getElementById('mouse-strength').value = preset.mouseStrength;
                     updateDisplay('mouse-strength', preset.mouseStrength, 2);
                     document.getElementById('rise-speed').value = preset.riseSpeed;
@@ -572,6 +586,8 @@
                     updateDisplay('detail-scale', preset.detailScale, 1);
                     document.getElementById('glow-strength').value = preset.glowStrength;
                     updateDisplay('glow-strength', preset.glowStrength, 1);
+                    
+                    console.log(`🎨 Applied "${name}" preset to menu lava lamp`);
                 });
             });
 
