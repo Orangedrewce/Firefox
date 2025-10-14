@@ -2592,7 +2592,8 @@ class CharacterController {
 
     // Apply an all-black material to the fox model to simulate charring
     applyCharredLook() {
-        if (!this.model || this._isCharred) return;
+        // Avoid applying while respawn is in progress to prevent race
+        if (!this.model || this._isCharred || this._respawnInProgress) return;
         try {
             if (!this._sharedCharMaterial) {
                 // Use a standard material with skinning so SkinnedMesh animation keeps working
@@ -2621,9 +2622,9 @@ class CharacterController {
         } catch (e) { reportError('char_effect_apply', 'Failed to apply charred look', e); }
     }
 
-    // Restore the fox model's original materials after death/respawn
+    // Restore original materials/colors after lava exposure
     restoreOriginalMaterials() {
-        if (!this.model || !this._isCharred) return;
+        if (!this.model) return;
         try {
             this.model.traverse(obj => {
                 if (!obj || !obj.isMesh) return;
@@ -3323,6 +3324,8 @@ class UIManager {
         this.scoreDisplay=document.getElementById('score-display');
         this.sprintBarContainer=document.getElementById('sprint-bar-container');
         this.gameUI = document.getElementById('game-ui');
+        this._gameOverPlayed = false;
+        this._gameOverAudio = document.getElementById('audio-game-over') || null;
         this._energyFailAnimating=false;
         this._gameOverKeyHandler = (e) => this.handleGameOverKey(e);
     }
@@ -3351,7 +3354,11 @@ class UIManager {
         }
     }
     showGameOver(score, finalTimeText){
-        this.gameOver.style.display='block';
+        // Show with fade-in class
+        if (this.gameOver) {
+            this.gameOver.classList.add('visible');
+            this.gameOver.style.display='block';
+        }
         
         // Stop backup beep when player dies
         if (window.gameInstance?.audioManager?.backupBeepPlaying) {
@@ -3395,12 +3402,28 @@ class UIManager {
         
         // Add keyboard shortcuts for R (respawn) and M (main menu)
         document.addEventListener('keydown', this._gameOverKeyHandler);
+
+        // Play game-over jingle exactly once per death event
+        try {
+            if (!this._gameOverPlayed && this._gameOverAudio) {
+                this._gameOverAudio.currentTime = 0;
+                this._gameOverAudio.loop = false;
+                // Respect master/SFX volume if available
+                const vol = Math.min(1, Math.max(0, (window.gameInstance?.settings?.sfxVolume ?? 1) * (window.gameInstance?.settings?.masterVolume ?? 1)));
+                this._gameOverAudio.volume = vol;
+                this._gameOverAudio.play().catch(()=>{});
+                this._gameOverPlayed = true;
+            }
+        } catch {}
     }
     hideGameOver(){
         // Remove keyboard shortcuts
         document.removeEventListener('keydown', this._gameOverKeyHandler);
         
-        this.gameOver.style.display='none';
+        if (this.gameOver) {
+            this.gameOver.classList.remove('visible');
+            this.gameOver.style.display='none';
+        }
         
         // SHOW GAME UI (health/energy bars)
         if (this.gameUI) this.gameUI.style.display='block';
@@ -3411,6 +3434,15 @@ class UIManager {
         
         const timeDisplay = document.getElementById('time-display');
         if (timeDisplay && !isSandbox) timeDisplay.style.display='block';
+
+        // Stop/cleanup the game-over audio so it won't overlap next death
+        try {
+            if (this._gameOverAudio) {
+                this._gameOverAudio.pause();
+                this._gameOverAudio.currentTime = 0;
+            }
+            this._gameOverPlayed = false; // allow future deaths to play again
+        } catch {}
     }
     updateDashStatus(isReady){
         if (!this.sprintBarContainer) return;
@@ -7134,7 +7166,7 @@ class Game {
         }
         // Lava contact check
         const inMainMenu = window.menuManager && window.menuManager.menu && window.menuManager.menu.style.display === 'flex' && window.menuManager.menuContext === 'main';
-    if (!inMainMenu && !this._isCleaningUp && this.running && CONFIG.lava.killOnContact && this._lavaCollider && this.playerController && !(this.playerController.fsm.current instanceof DeadState)){ // Only if enabled and player alive
+    if (!inMainMenu && !this._isCleaningUp && this.running && CONFIG.lava.killOnContact && this._lavaCollider && this.playerController){ // Only if enabled
             try {
                 const playerBody = this.playerController.body; // Defensive
                 if (playerBody){ // Defensive
@@ -7145,12 +7177,20 @@ class Game {
                         // Contact with lava detected
                         console.log('[LAVA] Contact detected', { playerBottom, surfaceY: CONFIG.lava.surfaceY, t: Math.round(performance.now()) });
                         GameLogger.lava('Player touched lava - death'); // Log event
-                        // Start looping lava hurt audio (user provided MP3) and play impact SFX
-                        try { this.audioManager?.startLavaHurtLoop(); } catch(e){}
-                        // Apply visual: char the fox on contact
-                        try { this.playerController?.applyCharredLook?.(); } catch{}
-                        this.audioManager?.playSound('damage'); // Play damage sound
-                        this.playerController.die('lava'); // Trigger death
+                        // Apply visual char only if not in respawn to avoid race that keeps model black
+                        try {
+                            if (!this.playerController?._respawnInProgress) {
+                                this.playerController?.applyCharredLook?.();
+                            }
+                        } catch{}
+                        // Only if player is not already dead, trigger audio and death
+                        const isDead = (this.playerController.fsm.current instanceof DeadState);
+                        if (!isDead){
+                            // Start looping lava hurt audio (user provided MP3) and play impact SFX
+                            try { this.audioManager?.startLavaHurtLoop(); } catch(e){}
+                            this.audioManager?.playSound('damage'); // Play damage sound
+                            this.playerController.die('lava'); // Trigger death
+                        }
                     }
                 }
             } catch(e) { // Defensive
@@ -7418,6 +7458,8 @@ class Game {
             this.playerController.sprint = this.cfg.player.maxSprint;
             this.playerController.uiManager?.updateHealth(this.playerController.health, this.cfg.player.maxHealth);
             this.playerController.uiManager?.updateSprint(this.playerController.sprint, this.cfg.player.maxSprint);
+            // Ensure any lava charring is removed on restart
+            try { this.playerController.restoreOriginalMaterials?.(); } catch {}
             this.playerController.fsm.setState(STATES.IDLE);
             if (this.playerController.model){
                 this.playerController.model.rotation.set(0,0,0); // clear death tilt
@@ -7610,8 +7652,7 @@ class Game {
         // so you might need a small tolerance (e.g., -0.1).
         if (!this.playerController?.body) return;
 
-        // Don't check collision if player is already dead
-        if (this.playerController.fsm.current instanceof DeadState) return;
+    // Note: We still apply visual even if dead; only skip re-triggering death/audio if already dead
 
         const playerPos = this.playerController.body.translation();
         const playerBottomY = playerPos.y - (CONFIG.player.height + CONFIG.player.radius); 
@@ -7620,10 +7661,14 @@ class Game {
             // Player has touched the lava! Trigger game over.
             GameLogger.lava("GAME OVER: Player fell into the rising lava!");
             
-            // Call your existing game over function (e.g., player death)
-            try { this.audioManager?.startLavaHurtLoop(); } catch{}
-            try { this.playerController?.applyCharredLook?.(); } catch{}
-            this.playerController.die('rising_lava');
+            // Apply visual char only if not in respawn to avoid race
+            try { if (!this.playerController?._respawnInProgress) this.playerController?.applyCharredLook?.(); } catch{}
+            // Only trigger audio+death if not already dead
+            const isDead = (this.playerController.fsm.current instanceof DeadState);
+            if (!isDead){
+                try { this.audioManager?.startLavaHurtLoop(); } catch{}
+                this.playerController.die('rising_lava');
+            }
             
             // Optional: Implement a brief 'sinking' effect by disabling player control 
             // and letting the player's y-position drop below the lava level slightly before stopping.
