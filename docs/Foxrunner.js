@@ -4482,18 +4482,13 @@ class Game {
     _loadGameAudio(){
         if (!this.audioLoader) return;
         
-        // Load stone slide effect (try WAV first, fallback to MP3)
-        this._loadAudio('./stone-slide-sound-effects-322794_taXzSSlN.wav', (buffer) => {
+        // Load stone slide effect (MP3)
+        this._loadAudio('./stone-slide-sound-effects-322794_taXzSSlN.mp3', (buffer) => {
             this.stoneSlideBuffer = buffer;
-            console.log('🎵 Stone slide audio loaded (WAV)');
-            GameLogger.lifecycle('Stone slide audio loaded (WAV)');
+            console.log('🎵 Stone slide audio loaded (MP3');
+            GameLogger.lifecycle('Stone slide audio loaded (MP3)');
         }, () => {
-            // Fallback to MP3 if WAV fails
-            this._loadAudio('./stone-slide-sound-effects-322794_taXzSSlN.mp3', (buffer) => {
-                this.stoneSlideBuffer = buffer;
-                console.log('🎵 Stone slide audio loaded (MP3 fallback)');
-                GameLogger.lifecycle('Stone slide audio loaded (MP3 fallback)');
-            });
+            // Fallback to MP3 if WAV fails);
         });
         
         // Load looping lava BGM
@@ -8008,3 +8003,4 @@ try {
 } catch(e){ console.warn('IIFE export failed', e); }
 
 })(window, document, window.THREE, window.RAPIER);
+
