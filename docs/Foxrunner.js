@@ -2470,6 +2470,10 @@ class CharacterController {
         GameLogger.death(`Player died. Reason: ${reason}`);
         // Ensure backup beep is stopped immediately on death
         try { this.game?.audioManager?.stopBackupBeep?.(); } catch {}
+        // If death was caused by lava, ensure the charred look is applied
+        try {
+            if (reason === 'lava' || reason === 'rising_lava') this.applyCharredLook?.();
+        } catch {}
         
         // Heavy splatter on death
         if (this.game?.particleSystem && this.model && this.game.settings.particles){
