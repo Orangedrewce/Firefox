@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firefox - Survive the Heat</title>
+    <link rel="stylesheet" href="Firefoxstyles.css">
+    <!-- Inline SVG favicon to avoid 404 from missing favicon.ico -->
+    <link rel="icon" href='data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="100%" height="100%" fill="%23ffffff"/><text x="50%" y="50%" font-size="32" text-anchor="middle" dominant-baseline="middle">🔥</text></svg>'>
+    
+    <!-- Minimal inline styles for Lava Lamp settings inside the Settings page -->
+    <style>
+        #lava-lamp-settings .value-display {
+            float: right;
+            color: #e67e22;
+            font-weight: bold;
+        }
+        #lava-lamp-settings .preset-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        #lava-lamp-settings .preset-btn {
+            background: linear-gradient(135deg, #e67e22, #d35400);
+            color: #fff;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        #lava-lamp-settings .settings-note {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #95a5a6;
+        }
+        /* Clear floats for labels with value-display spans */
+        #lava-lamp-settings .setting-item label::after { content: ""; display: block; clear: both; }
+    </style>
+</head>
+<body>
+    <!-- Main Canvas for Three.js Rendering -->
+    <canvas id="three-canvas"></canvas>
+
+    <!-- ===== MAIN MENU ===== -->
+    <div id="unified-menu">
+        <div class="menu-content">
+            <!-- Menu Header -->
+            <header class="menu-header">
+                <h1 class="menu-title">🌋 Firefox</h1>
+                <p class="menu-subtitle">Survive the Heat!</p>
+            </header>
+
+
+            <!-- Navigation Tabs -->
+            <nav class="menu-nav">
+                <button class="nav-btn active" data-section="play-section">PLAY</button>
+                <button class="nav-btn" data-section="controls-section">CONTROLS</button>
+                <button class="nav-btn" data-section="settings-section">SETTINGS</button>
+            </nav>
+
+            <!-- Play Section -->
+            <section class="menu-section active" id="play-section">
+                <h2 class="section-title">SELECT LEVEL</h2>
+                <div class="difficulty-selector" id="level-grid">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </section>
+
+            <!-- Controls Section -->
+            <section class="menu-section" id="controls-section">
+                <h2 class="section-title">CONTROLS</h2>
+                <div class="controls-grid">
+                    <!-- Movement Controls -->
+                    <article class="control-category movement-category">
+                        <h3>Movement</h3>
+                        <div class="control-item">
+                            <span class="control-action">Move Forward/Backward</span>
+                            <span class="control-key">W / S</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Sprint (infinite)</span>
+                            <span class="control-key">SHIFT</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Look & Rotate</span>
+                            <span class="control-key">MOUSE</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Zoom Camera</span>
+                            <span class="control-key">WHEEL</span>
+                        </div>
+                    </article>
+
+                    <!-- Action Controls -->
+                    <article class="control-category actions-category">
+                        <h3>Actions</h3>
+                        <div class="control-item">
+                            <span class="control-action">Quick Jump</span>
+                            <span class="control-key">SPACE (Tap)</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Charge Leap</span>
+                            <span class="control-key">SPACE (Hold)</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Dash</span>
+                            <span class="control-key">Q</span>
+                        </div>
+                    </article>
+
+                    <!-- System Controls -->
+                    <article class="control-category system-category">
+                        <h3>System</h3>
+                        <div class="control-item">
+                            <span class="control-action">Toggle Debug</span>
+                            <span class="control-key">F</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Restart Level</span>
+                            <span class="control-key">R</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Pause/Resume</span>
+                            <span class="control-key">ESC</span>
+                        </div>
+                        <div class="control-item">
+                            <span class="control-action">Toggle Logs</span>
+                            <span class="control-key">SHIFT + L</span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section class="menu-section" id="settings-section">
+                <h2 class="section-title">SETTINGS</h2>
+
+                <!-- Camera Settings -->
+                <fieldset class="settings-group">
+                    <legend>Camera Sensitivity</legend>
+                    <div class="setting-item">
+                        <label class="setting-label" for="sens-x">
+                            Horizontal: <span class="slider-value" id="sens-x-value">0.2</span>
+                        </label>
+                        <input type="range" id="sens-x" min="0.1" max="0.5" step="0.05" value="0.2" aria-label="Horizontal camera sensitivity">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="sens-y">
+                            Vertical: <span class="slider-value" id="sens-y-value">0.2</span>
+                        </label>
+                        <input type="range" id="sens-y" min="0.1" max="0.5" step="0.05" value="0.2" aria-label="Vertical camera sensitivity">
+                    </div>
+                    <div class="setting-item">
+                        <label for="invert-pitch">
+                            <input type="checkbox" id="invert-pitch" checked aria-label="Invert vertical camera">
+                            Invert Up/Down (Pitch)
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Audio Settings -->
+                <fieldset class="settings-group">
+                    <legend>Audio</legend>
+                    <div class="setting-item">
+                        <label class="setting-label" for="vol-master">
+                            Master: <span class="slider-value" id="vol-master-value">100%</span>
+                        </label>
+                        <input type="range" id="vol-master" min="0" max="100" step="1" value="100" aria-label="Master volume">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="vol-music">
+                            Music: <span class="slider-value" id="vol-music-value">70%</span>
+                        </label>
+                        <input type="range" id="vol-music" min="0" max="100" step="1" value="70" aria-label="Music volume">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="vol-sfx">
+                            SFX: <span class="slider-value" id="vol-sfx-value">100%</span>
+                        </label>
+                        <input type="range" id="vol-sfx" min="0" max="100" step="1" value="50" aria-label="Sound effects volume">
+                    </div>
+                    <div class="setting-item">
+                        <label for="forklift-noise">
+                            <input type="checkbox" id="forklift-noise" checked aria-label="Toggle forklift backup noise">
+                            Forklift Backup Noise
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Graphics Settings -->
+                <fieldset class="settings-group">
+                    <legend>Graphics</legend>
+                    <div class="setting-item">
+                        <label for="setting-shadows">
+                            <input type="checkbox" id="setting-shadows" checked aria-label="Toggle shadows">
+                            Shadows
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label for="setting-particles">
+                            <input type="checkbox" id="setting-particles" checked aria-label="Toggle blood particles">
+                            Blood Particles
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label for="setting-fog">
+                            <input type="checkbox" id="setting-fog" checked aria-label="Toggle fog">
+                            Fog
+                        </label>
+                    </div>
+                </fieldset>
+
+                <!-- Lava Lamp Settings (moved from test page) -->
+                <fieldset class="settings-group" id="lava-lamp-settings">
+                    <legend>Menu Lava Lamp</legend>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="mouse-strength">
+                            Mouse Strength
+                            <span class="value-display" id="mouse-strength-val">0.30</span>
+                        </label>
+                        <input type="range" id="mouse-strength" min="0.1" max="0.5" step="0.05" value="0.3" aria-label="Lava lamp mouse strength">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="rise-speed">
+                            Rise Speed
+                            <span class="value-display" id="rise-speed-val">0.08</span>
+                        </label>
+                        <input type="range" id="rise-speed" min="0.05" max="0.2" step="0.01" value="0.08" aria-label="Lava lamp rise speed">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="blob-scale">
+                            Blob Scale
+                            <span class="value-display" id="blob-scale-val">1.8</span>
+                        </label>
+                        <input type="range" id="blob-scale" min="0.5" max="3.0" step="0.1" value="1.8" aria-label="Lava lamp blob scale">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="detail-scale">
+                            Detail Scale
+                            <span class="value-display" id="detail-scale-val">5.0</span>
+                        </label>
+                        <input type="range" id="detail-scale" min="2.0" max="10.0" step="0.5" value="5.0" aria-label="Lava lamp detail scale">
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-label" for="glow-strength">
+                            Glow Strength
+                            <span class="value-display" id="glow-strength-val">1.5</span>
+                        </label>
+                        <input type="range" id="glow-strength" min="0.5" max="3.0" step="0.1" value="1.5" aria-label="Lava lamp glow strength">
+                    </div>
+
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-preset="calm" type="button">Calm</button>
+                        <button class="preset-btn" data-preset="energetic" type="button">Energetic</button>
+                        <button class="preset-btn" data-preset="smooth" type="button">Smooth</button>
+                        <button class="preset-btn" data-preset="chaotic" type="button">Chaotic</button>
+                    </div>
+
+                    <p class="settings-note">Affects the animated lava background shown behind this menu. Move your mouse to interact.</p>
+                </fieldset>
+
+                <!-- Data Management -->
+                <fieldset class="settings-group">
+                    <legend>Data Management</legend>
+                    <p class="reset-warning">Reset all saved progress and scores. This cannot be undone.</p>
+                    <button class="reset-btn" id="btn-reset-data">RESET ALL DATA</button>
+                    <p class="reset-confirm" id="reset-confirm-text">Click again to confirm</p>
+                </fieldset>
+            </section>
+
+            <!-- Menu Footer -->
+            <footer class="menu-footer">
+                <button id="btn-back-to-pause" class="nav-btn" style="display: none;">BACK TO GAME</button>
+                <p>Click anywhere to capture mouse • Press ESC to return to menu</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- ===== PAUSE MENU OVERLAY ===== -->
+    <div id="pause-menu" class="screen-overlay" style="display: none;">
+        <div class="menu-content">
+            <header class="menu-header">
+                <h1 class="menu-title">PAUSED</h1>
+            </header>
+            <nav class="pause-buttons">
+                <button id="btn-resume" class="play-btn">RESUME</button>
+                <button id="btn-restart-pause" class="nav-btn">RESTART</button>
+                <button id="btn-settings-pause" class="nav-btn">SETTINGS</button>
+                <button id="btn-menu-pause" class="nav-btn">MAIN MENU</button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- ===== GAME OVER SCREEN ===== -->
+    <div id="game-over">
+        <h1>YOU DIED</h1>
+        <p id="final-score">Score: 0</p>
+        <p id="final-time">Time: 00:00.000</p>
+        <div class="game-over-buttons">
+            <button id="btn-retry-death" class="btn btn-primary btn-large">R for respawn</button>
+            <button id="btn-menu-death" class="btn btn-alt btn-medium">M for Main menu</button>
+        </div>
+    </div>
+
+    <!-- ===== IN-GAME HUD ===== -->
+    <div id="game-ui">
+        <!-- Health Bar -->
+        <div class="stat-container">
+            <div class="stat-label">HEALTH</div>
+            <div class="stat-bar">
+                <div class="stat-fill" id="health-fill" style="width: 100%;"></div>
+                <div class="stat-text" id="health-text">100 / 100</div>
+            </div>
+        </div>
+
+        <!-- Energy/Sprint Bar -->
+        <div class="stat-container">
+            <div class="stat-label">ENERGY</div>
+            <div class="stat-bar" id="sprint-bar-container">
+                <div id="charge-preview"></div>
+                <div class="stat-fill" id="sprint-fill" style="width: 100%;"></div>
+                <div class="stat-text" id="sprint-text">100 / 100</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score and Timer Display -->
+    <div id="score-display">SCORE: 0</div>
+    <div id="time-display">00:00.000</div>
+
+    <!-- Pointer Lock Hint -->
+    <div id="pointerLockHint" style="display: none;">
+        Press <b>ESC</b> twice to pause/open menu
+    </div>
+
+    <!-- ===== DEBUG ELEMENTS ===== -->
+    <div id="debug-overlay"></div>
+    <div id="debug-panel">
+        <div class="debug-header">
+            <button id="download-logs" class="btn btn-alt">Download Logs</button>
+            <button id="close-debug" class="btn btn-alt">Close</button>
+            <div class="debug-header-note">Shift+L to toggle</div>
+        </div>
+        <div id="log-content"></div>
+    </div>
+
+    <!-- Dynamic Overlays Container -->
+    <div id="dynamic-overlays"></div>
+
+    <!-- Preloaded Audio Elements -->
+    <!-- Lava hurt loop: hidden element the game will control programmatically -->
+    <audio id="audio-lava-hurt" preload="auto" loop style="display:none;">
+        <source src="Player Fire Hurt (Nr. 3 Minecraft Sound) - Sound Effect for editing.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- ===== SCRIPTS ===== -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://esm.sh/three@0.164.1",
+                "three/addons/": "https://esm.sh/three@0.164.1/examples/jsm/",
+                "@dimforge/rapier3d-compat": "https://esm.sh/@dimforge/rapier3d-compat"
+            }
+        }
+    </script>
+
+    <script type="module">
+        /* Imports */
+        import * as THREE from 'three';
+        import RAPIER from '@dimforge/rapier3d-compat';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        
+        /* Game Logger - Define FIRST before anything async */
+        const GameLogger = {
+            lifecycle(msg, ...args) { console.log(`Game: ${msg}`, ...args); },
+            lava(msg, ...args) { console.warn(`Lava: ${msg}`, ...args); },
+            track(msg, ...args) { console.log(`Track: ${msg}`, ...args); },
+            player(msg, ...args) { console.log(`Player: ${msg}`, ...args); },
+            fsm(msg, ...args) { console.log(`FSM: ${msg}`, ...args); },
+            input(msg, ...args) { console.log(`Input: ${msg}`, ...args); },
+            action(msg, ...args) { console.log(`Action: ${msg}`, ...args); },
+            charge(msg, ...args) { console.log(`Charge Leap: ${msg}`, ...args); },
+            collision(msg, ...args) { console.log(`Collision: ${msg}`, ...args); },
+            death(msg, ...args) { console.error(`Death: ${msg}`, ...args); },
+            score(msg, ...args) { console.log(`Score: ${msg}`, ...args); },
+            perf(msg, ...args) { console.log(`Perf: ${msg}`, ...args); },
+            cleanup(msg, ...args) { console.log(`Cleanup: ${msg}`, ...args); }
+        };
+
+        /* Expose libraries and logger to global scope IMMEDIATELY - BEFORE any await */
+        window.THREE = THREE;
+        window.RAPIER = RAPIER;
+        window.GLTFLoader = GLTFLoader;
+        window.GameLogger = GameLogger;
+        
+        console.log('✅ Core libraries exposed to global scope');
+        
+        // Try to import lava lamp (async is OK here since it's after GameLogger is set)
+        let LavaLampBackground = null;
+        try {
+            const lavaModule = await import('./lavaLampShader.js');
+            LavaLampBackground = lavaModule.LavaLampBackground;
+            console.log('✅ Lava lamp module loaded');
+        } catch (e) {
+            console.warn('⚠️ Lava lamp module failed to load, continuing without it:', e.message);
+        }
+
+        /* Initialize Lava Lamp Background */
+        let lavaLampBackground = null;
+        
+        // Initialize lava lamp ONLY when menu is visible, never blocks game
+        function initLavaLamp() {
+            // Skip if lava lamp module didn't load
+            if (!LavaLampBackground) {
+                console.log('⚠️ Lava lamp not available, skipping initialization');
+                window.lavaLampBackground = { 
+                    start: () => {}, 
+                    stop: () => {}, 
+                    updateSettings: () => {},
+                    destroy: () => {}
+                };
+                return;
+            }
+            
+            try {
+                // Check if THREE is available
+                if (!window.THREE) {
+                    console.warn('THREE.js not loaded yet, retrying in 100ms...');
+                    setTimeout(initLavaLamp, 100);
+                    return;
+                }
+                
+                // Check if menu container exists AND is visible
+                const menuContainer = document.getElementById('unified-menu');
+                if (!menuContainer) {
+                    console.warn('Menu container not found, retrying in 100ms...');
+                    setTimeout(initLavaLamp, 100);
+                    return;
+                }
+                
+                // Check if menu is actually visible (not hidden by game)
+                const menuStyle = window.getComputedStyle(menuContainer);
+                if (menuStyle.display === 'none') {
+                    console.log('⏸️ Menu is hidden, deferring lava lamp initialization');
+                    // We'll initialize when menu becomes visible
+                    window.lavaLampBackground = {
+                        start: () => {
+                            if (!lavaLampBackground && LavaLampBackground) {
+                                try {
+                                    lavaLampBackground = new LavaLampBackground('unified-menu');
+                                    lavaLampBackground.start();
+                                    console.log('✨ Lava lamp started on demand');
+                                } catch (e) {
+                                    console.error('Failed to start lava lamp:', e);
+                                }
+                            } else if (lavaLampBackground) {
+                                lavaLampBackground.start();
+                            }
+                        },
+                        stop: () => lavaLampBackground?.stop(),
+                        updateSettings: (s) => lavaLampBackground?.updateSettings(s),
+                        destroy: () => lavaLampBackground?.destroy()
+                    };
+                    return;
+                }
+                
+                console.log('🌋 Initializing lava lamp shader (menu is visible)...');
+                lavaLampBackground = new LavaLampBackground('unified-menu');
+                lavaLampBackground.start();
+                
+                // Expose to global scope for menu control
+                window.lavaLampBackground = lavaLampBackground;
+                
+                console.log('✨ Lava lamp shader initialized successfully');
+            } catch (e) {
+                console.error('❌ Failed to initialize lava lamp shader:', e);
+                console.error('Game will continue without lava lamp');
+                
+                // Create stub so game doesn't crash
+                window.lavaLampBackground = { 
+                    start: () => {}, 
+                    stop: () => {}, 
+                    updateSettings: () => {},
+                    destroy: () => {}
+                };
+            }
+        }
+        
+        // Delay initialization to let core game setup first
+        setTimeout(() => {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => setTimeout(initLavaLamp, 500));
+            } else {
+                setTimeout(initLavaLamp, 500);
+            }
+        }, 100);
+    </script>
+
+    <!-- Lava Lamp Controls wiring -->
+    <script type="module">
+        // Wire up the lava lamp controls UI to the global lavaLampBackground created earlier
+        const presets = {
+            calm: { mouseStrength: 0.2, riseSpeed: 0.05, blobScale: 2.5, detailScale: 3.0, glowStrength: 1.0 },
+            energetic: { mouseStrength: 0.4, riseSpeed: 0.15, blobScale: 1.2, detailScale: 7.0, glowStrength: 2.5 },
+            smooth: { mouseStrength: 0.3, riseSpeed: 0.08, blobScale: 2.0, detailScale: 4.0, glowStrength: 1.8 },
+            chaotic: { mouseStrength: 0.5, riseSpeed: 0.18, blobScale: 0.8, detailScale: 9.0, glowStrength: 3.0 }
+        };
+
+        function updateDisplay(id, value, digits = 2) {
+            const el = document.getElementById(id + '-val');
+            if (el) el.textContent = Number(value).toFixed(digits);
+        }
+
+        function applySettings(settings) {
+            if (window.lavaLampBackground && typeof window.lavaLampBackground.updateSettings === 'function') {
+                window.lavaLampBackground.updateSettings(settings);
+            }
+        }
+
+        function setupLavaLampControls() {
+            const container = document.getElementById('lava-lamp-settings');
+            if (!container) return;
+
+            const map = {
+                'mouse-strength': { key: 'mouseStrength', digits: 2 },
+                'rise-speed': { key: 'riseSpeed', digits: 2 },
+                'blob-scale': { key: 'blobScale', digits: 1 },
+                'detail-scale': { key: 'detailScale', digits: 1 },
+                'glow-strength': { key: 'glowStrength', digits: 1 }
+            };
+
+            Object.entries(map).forEach(([id, meta]) => {
+                const slider = document.getElementById(id);
+                if (!slider) return;
+                // Initial display sync
+                updateDisplay(id, slider.value, meta.digits);
+                slider.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    updateDisplay(id, value, meta.digits);
+                    applySettings({ [meta.key]: value });
+                });
+            });
+
+            // Preset buttons
+            container.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const name = btn.getAttribute('data-preset');
+                    const preset = presets[name];
+                    if (!preset) return;
+                    applySettings(preset);
+                    // Reflect in UI
+                    document.getElementById('mouse-strength').value = preset.mouseStrength;
+                    updateDisplay('mouse-strength', preset.mouseStrength, 2);
+                    document.getElementById('rise-speed').value = preset.riseSpeed;
+                    updateDisplay('rise-speed', preset.riseSpeed, 2);
+                    document.getElementById('blob-scale').value = preset.blobScale;
+                    updateDisplay('blob-scale', preset.blobScale, 1);
+                    document.getElementById('detail-scale').value = preset.detailScale;
+                    updateDisplay('detail-scale', preset.detailScale, 1);
+                    document.getElementById('glow-strength').value = preset.glowStrength;
+                    updateDisplay('glow-strength', preset.glowStrength, 1);
+                });
+            });
+
+            // If lava lamp is ready, push initial values
+            const initial = {
+                mouseStrength: parseFloat(document.getElementById('mouse-strength')?.value ?? 0.3),
+                riseSpeed: parseFloat(document.getElementById('rise-speed')?.value ?? 0.08),
+                blobScale: parseFloat(document.getElementById('blob-scale')?.value ?? 1.8),
+                detailScale: parseFloat(document.getElementById('detail-scale')?.value ?? 5.0),
+                glowStrength: parseFloat(document.getElementById('glow-strength')?.value ?? 1.5)
+            };
+            applySettings(initial);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupLavaLampControls);
+        } else {
+            setupLavaLampControls();
+        }
+    </script>
+
+    <!-- Main Game Script -->
+    <script src="Foxrunner.js" defer></script>
+</body>
+</html>
+
+
+
+
+//const progression = {
+    //unlockableAbilities: ['airDash', 'chargeLeap', 'doubleJump'],-levels are locked
+    // easy unlock conditions -unlock easy status = true 
+    // medium unlock conditions -after easy condition met
+    // hard unlock conditions -after medium condition met
+    // Crumble unlock conditions -after hard condition met
+//};
+// Add loading screen 
+//Remove all but one ball from dev room 
+//add a mesh collider thats visible on f menu 
+
+//add a rudementary AI that controlls the ball
+//USE SAME COLLIDER AS BALL
+//ADD SIMPLE PATH pick direction walk pause repeat
+//ADD PLAYER DETECT RANGE
+//ADD CHASE MODE UPON DETECTION SET SPEED
+//ADD ATTACK MODE UPON PLAYER IN RANGE HOMING MISSILE BODY COLLIDE 
+//ADD DAMAGE TO PLAYER UPON ATTACK LIGHT AND HEAVY SPIKE AND LAVA 
+//ADD HEALTH
+//ADD DEATH STATE- DELETE WHEN HEALTH 0 
+//ADD RESPAWN
+//ADD JUMP 
+//ADD DASH
+//ADD SPRINT
+
