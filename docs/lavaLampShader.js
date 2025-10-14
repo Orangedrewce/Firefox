@@ -24,255 +24,48 @@ uniform float u_blobScale;      // Base blob size (0.5-3.0)
 uniform float u_detailScale;    // Detail fineness (2.0-10.0)
 uniform float u_glowStrength;   // Glow intensity (0.5-3.0)
 
-// ============================================================================
-// NOISE FUNCTIONS - Simplex noise and FBM for organic blob generation
-// ============================================================================
-
-// 2D Simplex noise base (pseudo-Perlin for simplicity)
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
-float noise2D(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f); // Smoothstep interpolation
-    
-    float n0 = hash(i);
-    float n1 = hash(i + vec2(1.0, 0.0));
-    float n2 = hash(i + vec2(0.0, 1.0));
-    float n3 = hash(i + vec2(1.0, 1.0));
-    
-    float nx0 = mix(n0, n1, f.x);
-    float nx1 = mix(n2, n3, f.x);
-    return mix(nx0, nx1, f.y);
-}
-
-// 3D noise by combining 2D noise with time/z offset
-float noise3D(vec3 p) {
-    float n1 = noise2D(p.xy);
-    float n2 = noise2D(p.xy + vec2(123.456, 789.012));
-    return mix(n1, n2, sin(p.z) * 0.5 + 0.5);
-}
-
-// Multi-octave FBM (Fractional Brownian Motion) for rich detail
-float fbm(vec3 p, int octaves, float persistence, float lacunarity) {
-    float total = 0.0;
-    float amplitude = 1.0;
-    float maxValue = 0.0;
-    
-    for (int i = 0; i < 8; i++) {  // Max 8 iterations (adjust for performance)
-        if (i >= octaves) break;
-        
-        total += noise3D(p) * amplitude;
-        maxValue += amplitude;
-        amplitude *= persistence;
-        p *= lacunarity;
-    }
-    
-    return total / maxValue;
-}
-
-// Ridged noise for sharp, vein-like lava flows
-float ridgedNoise(vec3 p) {
-    float n = fbm(p, 4, 0.5, 2.0);
-    return 1.0 - abs(n) * 2.0;  // Sharp ridges
-}
-
-// Curl noise for organic swirling motion
-vec3 curlNoise(vec3 p) {
-    float eps = 0.1;
-    
-    // Sample noise at nearby points for gradient
-    float n1 = noise3D(p + vec3(eps, 0.0, 0.0));
-    float n2 = noise3D(p - vec3(eps, 0.0, 0.0));
-    float n3 = noise3D(p + vec3(0.0, eps, 0.0));
-    float n4 = noise3D(p - vec3(0.0, eps, 0.0));
-    float n5 = noise3D(p + vec3(0.0, 0.0, eps));
-    float n6 = noise3D(p - vec3(0.0, 0.0, eps));
-    
-    // Calculate curl
-    vec3 curl;
-    curl.x = (n4 - n3) - (n6 - n5);
-    curl.y = (n6 - n5) - (n2 - n1);
-    curl.z = (n2 - n1) - (n4 - n3);
-    
-    return curl * 0.5 / eps;
-}
-
-// Enhanced organic blob with curl influence
-float organicBlob(vec2 p, float time) {
-    vec3 pos = vec3(p * u_blobScale, time * 0.15);
-    
-    // Base shape with curl influence
-    vec3 curl = curlNoise(pos * 1.5);
-    pos.xy += curl.xy * 0.3; // Swirl the coordinates
-    
-    float base = ridgedNoise(pos);
-    
-    // Add secondary swirling detail
-    vec3 detailPos = vec3(p * u_detailScale, time * 0.3 + 100.0);
-    vec3 detailCurl = curlNoise(detailPos);
-    detailPos.xy += detailCurl.xy * 0.1;
-    
-    float detail = fbm(detailPos, 3, 0.6, 2.0);
-    
-    return base + detail * 0.2;
-}
-
-// Multi-layer blob system for depth
-float multiLayerBlob(vec2 p, float time) {
-    // Layer 1: Large, slow-moving blobs (background)
-    float layer1 = organicBlob(p * 0.8, time * 0.3) * 0.8;
-    
-    // Layer 2: Medium blobs (main content)
-    float layer2 = organicBlob(p * 1.2, time * 0.5) * 1.0;
-    
-    // Layer 3: Small, fast details (foreground)
-    float layer3 = organicBlob(p * 2.0, time * 0.8) * 0.4;
-    
-    // Combine layers with different thresholds
-    float blob1 = smoothstep(0.3, 0.6, layer1 + 0.5);
-    float blob2 = smoothstep(0.4, 0.7, layer2 + 0.5);
-    float blob3 = smoothstep(0.5, 0.8, layer3 + 0.5);
-    
-    // Blend layers (foreground over background)
-    return max(blob1, max(blob2, blob3));
-}
-
-// Bubble effect for small spark details
-float bubbleEffect(vec2 p, float time) {
-    vec3 bubblePos = vec3(p * 8.0, time * 2.0);
-    float bubbles = fbm(bubblePos, 2, 0.7, 3.0);
-    
-    // Only show bright spots
-    float bubbleMask = smoothstep(0.7, 0.9, bubbles);
-    
-    // Make bubbles move upward faster
-    bubbleMask *= (0.8 + 0.4 * sin(time * 10.0 + p.x * 20.0));
-    
-    return bubbleMask * 0.3;
-}
-
-// Heat distortion effect
-vec2 heatDistortion(vec2 p, float time) {
-    float distortion = sin(p.x * 15.0 + time * 4.0) * 
-                      sin(p.y * 12.0 + time * 3.5) * 0.003;
-    return vec2(distortion, distortion * 0.7);
-}
-
-// ============================================================================
-// COLOR & GRADIENT FUNCTIONS
-// ============================================================================
-
-// Enhanced lava gradient with deeper color palette and multi-frequency pulsation
-vec3 lavaGradient(float v, float glowStrength) {
-    // Deep magma colors with more variation
-    vec3 deepMagma = vec3(0.15, 0.02, 0.0);
-    vec3 darkRed = vec3(0.4, 0.08, 0.01);
-    vec3 orange = vec3(1.0, 0.3, 0.05);
-    vec3 brightOrange = vec3(1.0, 0.5, 0.1);
-    vec3 yellow = vec3(1.0, 0.8, 0.3);
-    vec3 whiteHot = vec3(1.0, 0.95, 0.8);
-    
-    vec3 color;
-    if (v < 0.3) {
-        color = mix(deepMagma, darkRed, v * 3.33);
-    } else if (v < 0.5) {
-        color = mix(darkRed, orange, (v - 0.3) * 5.0);
-    } else if (v < 0.7) {
-        color = mix(orange, brightOrange, (v - 0.5) * 5.0);
-    } else if (v < 0.9) {
-        color = mix(brightOrange, yellow, (v - 0.7) * 5.0);
-    } else {
-        color = mix(yellow, whiteHot, (v - 0.9) * 10.0);
-    }
-    
-    // Multi-frequency pulsation for more organic feel
-    float slowPulse = 0.5 + 0.5 * sin(u_time * 2.0);
-    float fastPulse = 0.7 + 0.3 * sin(u_time * 8.0);
-    float glow = pow(v, 4.0) * slowPulse * fastPulse * glowStrength;
-    
-    return color + whiteHot * glow;
-}
-
-// ============================================================================
-// MAIN FRAGMENT SHADER
-// ============================================================================
-
 void main() {
-    // Normalize screen coordinates [0, resolution] -> [0, 1]
-    // y=0 at bottom, y=1 at top (matches UI coordinates)
+    vec2 fragCoord = gl_FragCoord.xy;
+    vec2 iResolution = u_resolution;
+    float iTime = u_time;
+    
+    // Mouse interaction
     vec2 uv = gl_FragCoord.xy / u_resolution;
-    
-    // Aspect ratio correction (non-square screens)
-    vec2 ratio = u_resolution / min(u_resolution.x, u_resolution.y);
-    vec2 p = (uv - 0.5) * ratio;
-    
-    // ========================================================================
-    // HEAT DISTORTION - Subtle wavering effect
-    // ========================================================================
-    
-    p += heatDistortion(p, u_time);
-    
-    // ========================================================================
-    // MOUSE INTERACTION - Enhanced with multiple effects
-    // ========================================================================
-    
     vec2 toMouse = u_mouse - uv;
     float mouseDist = length(toMouse);
     
+    // Apply mouse distortion
+    vec2 mouseOffset = vec2(0.0);
     if (mouseDist < 0.3) {
         float strength = u_mouseStrength;
-        
-        // 1. Push away from mouse (repulsion)
-        float push = strength * (0.3 - mouseDist) / 0.3;
-        p -= toMouse * push * 0.5;
-        
-        // 2. Swirl around mouse
-        float swirl = strength * (0.3 - mouseDist) / 0.3;
-        float angle = swirl * 2.0 * sin(u_time * 4.0);
-        mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
-        vec2 offset = p - (u_mouse - 0.5) * ratio;
-        p = (u_mouse - 0.5) * ratio + rotation * offset;
-        
-        // 3. Ripple effect
-        float ripple = sin(mouseDist * 20.0 - u_time * 8.0) * strength;
-        p += normalize(toMouse) * ripple * 0.02;
+        float influence = (0.3 - mouseDist) / 0.3;
+        mouseOffset = toMouse * strength * influence * 50.0;
     }
     
-    // ========================================================================
-    // RISING EFFECT - Blobs appear to rise upward seamlessly
-    // ========================================================================
+    // Simple shader implementation
+    vec2 col;
+    float t = iTime * 0.1;
+    vec2 coords = (fragCoord - iResolution.xy) / iResolution.y + vec2(t, t * 2.0);
     
-    // Offset y by time, looping every 2 units for seamless repeat
-    //p.y -= mod(u_time * u_riseSpeed, 2.0);
+    // Apply mouse offset to coordinates
+    coords += mouseOffset * 0.01;
     
-    // ========================================================================
-    // MULTI-LAYER BLOB GENERATION - Enhanced depth and detail
-    // ========================================================================
+    float factor = 1.5;
+    vec2 v1;
     
-    float lava_mask = multiLayerBlob(p, u_time);
+    for(int i = 0; i < 12; i++) {
+        coords *= -factor * factor;
+        v1 = coords.yx / factor;
+        coords += sin(v1 + col + t * 10.0) / factor;
+        col += vec2(sin(coords.x - coords.y + v1.x - col.y), sin(coords.y - coords.x + v1.y - col.x));
+    }
     
-    // Add bubble details for sparkle effect
-    lava_mask += bubbleEffect(p, u_time);
+    vec3 finalColor = vec3(col.x + 4.0, col.x - col.y / 2.0, col.x / 5.0) / 2.0;
     
-    // Vertical fade with curve for natural falloff
-    float verticalFade = pow(1.0 - uv.y, 0.7);
-    lava_mask *= (0.5 + verticalFade * 0.5);
+    // Apply glow strength
+    finalColor *= u_glowStrength;
     
-    // ========================================================================
-    // COLORING & OUTPUT
-    // ========================================================================
-    
-    vec3 color = lavaGradient(lava_mask, u_glowStrength);
-    
-    // Subtle vignette for focus
-    float vignette = 1.0 - length(uv - 0.5) * 0.3;
-    color *= vignette;
-    
-    // Final output with slight saturation boost
-    gl_FragColor = vec4(color * 1.05, 1.0);
+    gl_FragColor = vec4(finalColor, 1.0);
 }
 `;
 
